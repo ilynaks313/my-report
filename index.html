@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+    <style>
+        :root { --bg: #030712; --card: #111827; --blue: #3b82f6; --text: #f8fafc; --hint: #64748b; --green: #10b981; }
+        html, body { height: 100%; margin: 0; padding: 0; background: var(--bg); color: var(--text); overflow: hidden; }
+        .main-container { height: 100vh; display: flex; flex-direction: column; padding: 15px; box-sizing: border-box; overflow-y: auto; padding-bottom: 120px; }
+        
+        /* Tabs Logic */
+        .tab-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .tab { padding: 12px; text-align: center; border-bottom: 2px solid #1e293b; color: var(--hint); font-weight: bold; cursor: pointer; }
+        .tab.active { border-bottom-color: var(--blue); color: white; }
+
+        .view { display: none; } .view.active { display: block; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .balance-card { background: linear-gradient(135deg, #2563eb, #3b82f6); border-radius: 16px; padding: 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        input { width: 100%; background: #000; border: 1px solid #1e293b; padding: 14px; border-radius: 12px; color: white; box-sizing: border-box; outline: none; margin-bottom: 10px; }
+        
+        .price-badge { background: #1e293b; padding: 15px; border-radius: 12px; text-align: center; font-weight: 800; border: 1px solid var(--blue); color: var(--green); margin-bottom: 15px; }
+        .history-item { background: #111827; padding: 15px; border-radius: 12px; border: 1px solid #1e293b; margin-bottom: 10px; }
+        
+        .footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 20px; background: rgba(3, 7, 18, 0.95); border-top: 1px solid #1e293b; backdrop-filter: blur(10px); z-index: 1000; }
+        .submit-btn { width: 100%; background: var(--blue); color: white; border: none; padding: 18px; border-radius: 12px; font-size: 18px; font-weight: 800; cursor: pointer; }
+    </style>
+</head>
+<body onload="initApp()">
+
+    <div class="main-container">
+        <div class="tab-row">
+            <div class="tab active" id="t-order" onclick="switchTab('v-order')">New Order</div>
+            <div class="tab" id="t-hist" onclick="switchTab('v-hist')">History</div>
+        </div>
+
+        <div id="v-order" class="view active">
+            <div class="balance-card">
+                <div><div style="font-size:11px; opacity:0.8;">Profit Eats Wallet</div><div id="bal-ui" style="font-size:26px; font-weight:900;">$0.00</div></div>
+                <div style="background:rgba(255,255,255,0.2); padding:8px 12px; border-radius:10px; font-size:12px;" onclick="tg.showAlert('LTC Address: YOUR_LTC_HERE')">Add Funds +</div>
+            </div>
+
+            <input type="text" id="address" placeholder="Delivery Address">
+            <input type="tel" id="phone" placeholder="Phone Number" maxlength="10">
+            <label style="font-size:11px; color:var(--hint); font-weight:800;">GRUBHUB CART TOTAL ($)</label>
+            <input type="number" id="cart-total" placeholder="0.00" oninput="calc()">
+
+            <div class="price-badge" id="price-ui">You Pay (30%): $0.00</div>
+
+            <input type="file" id="cart-file" accept="image/*" style="display:none" onchange="hImg()">
+            <div id="file-btn" style="background:#000; border:1px dashed var(--blue); padding:15px; text-align:center; border-radius:12px; color:var(--blue); margin-bottom:100px;" onclick="document.getElementById('cart-file').click()">📸 Upload Cart Screenshot</div>
+
+            <div class="footer"><button class="submit-btn" id="sub-btn" onclick="submitOrder()">ORDER NOW</button></div>
+        </div>
+
+        <div id="v-hist" class="view">
+            <div id="history-list">
+                <p style="text-align:center; color:var(--hint);">No previous orders found.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        let img64 = "";
+
+        function initApp() {
+            tg.expand();
+            if (new Date().getMonth() === 11) confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+        }
+
+        function switchTab(id) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            if(id === 'v-order') document.getElementById('t-order').classList.add('active');
+            else document.getElementById('t-hist').classList.add('active');
+        }
+
+        function calc() {
+            const total = document.getElementById('cart-total').value;
+            const price = (total * 0.3).toFixed(2);
+            document.getElementById('price-ui').innerText = `You Pay (30%): $${price}`;
+        }
+
+        function hImg() {
+            const file = document.getElementById('cart-file').files[0];
+            const reader = new FileReader();
+            reader.onloadend = () => { img64 = reader.result; document.getElementById('file-btn').innerText = "✅ Cart Attached"; };
+            reader.readAsDataURL(file);
+        }
+
+        function submitOrder() {
+            const total = document.getElementById('cart-total').value;
+            const price = (total * 0.3).toFixed(2);
+            const addr = document.getElementById('address').value;
+            if(!addr || !total || !img64) return tg.showAlert("Complete all fields!");
+
+            tg.sendData(JSON.stringify({
+                action: "order_final", 
+                addr: addr, 
+                phn: document.getElementById('phone').value,
+                price: price,
+                img: img64
+            }));
+            tg.close();
+        }
+    </script>
+</body>
+</html>
