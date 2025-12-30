@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Profit Eats - 70% OFF</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_KEY&libraries=places"></script>
+    
+    <style>
+        :root { 
+            --bg: #030712; --card: #111827; --blue: #3b82f6; --text: #f8fafc; 
+            --hint: #64748b; --green: #10b981; --red: #ef4444; 
+        }
+        
+        body { 
+            background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; 
+            margin: 0; padding: 15px; padding-bottom: 120px; overflow-x: hidden;
+        }
+
+        /* Rainys Style UI Components */
+        .promo-banner { 
+            background: #fbbf24; color: black; padding: 10px; font-weight: bold; 
+            font-size: 12px; text-align: center; margin: -15px -15px 15px -15px; 
+        }
+
+        .balance-card {
+            background: linear-gradient(135deg, #1e40af, #3b82f6);
+            border-radius: 16px; padding: 20px; display: flex; 
+            justify-content: space-between; align-items: center; margin-bottom: 20px;
+            box-shadow: 0 10px 25px rgba(59, 130, 246, 0.3);
+        }
+
+        .toggle-row { 
+            display: grid; grid-template-columns: 1fr 1fr; gap: 10px; 
+            background: #0f172a; padding: 6px; border-radius: 12px; margin-bottom: 20px; 
+        }
+        .toggle-opt { 
+            padding: 12px; text-align: center; border-radius: 8px; 
+            font-weight: 700; cursor: pointer; transition: 0.3s;
+        }
+        .toggle-opt.active { background: var(--blue); color: white; }
+
+        .field { margin-bottom: 15px; }
+        label { 
+            display: block; font-size: 11px; color: var(--hint); 
+            margin-bottom: 6px; font-weight: 800; text-transform: uppercase; 
+        }
+        input { 
+            width: 100%; background: #000; border: 1px solid #1e293b; 
+            padding: 14px; border-radius: 12px; color: white; box-sizing: border-box; 
+            outline: none; transition: 0.3s;
+        }
+        input:focus { border-color: var(--blue); }
+
+        .view { display: none; animation: slideUp 0.4s ease; }
+        .view.active { display: block; }
+        @keyframes slideUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+
+        .footer { 
+            position: fixed; bottom: 0; left: 0; right: 0; padding: 15px; 
+            background: rgba(3, 7, 18, 0.95); border-top: 1px solid #1e293b; 
+            backdrop-filter: blur(10px); z-index: 100;
+        }
+        .submit-btn { 
+            width: 100%; background: var(--blue); color: white; border: none; 
+            padding: 16px; border-radius: 12px; font-size: 16px; font-weight: 700;
+        }
+        .submit-btn:disabled { background: #1e293b; color: #4b5563; }
+    </style>
+</head>
+<body onload="initApp()">
+
+    <div class="promo-banner" id="seasonal-banner">Loading Profit Eats...</div>
+
+    <div id="view-form" class="view active">
+        <div class="balance-card">
+            <div><div style="font-size:11px; opacity:0.8;">Wallet Balance</div><div style="font-size:26px; font-weight:900;" id="user-bal">$0.00</div></div>
+            <div style="background:rgba(255,255,255,0.2); padding:8px 12px; border-radius:10px; font-size:12px; font-weight:bold;">Add Funds +</div>
+        </div>
+
+        <div class="toggle-row">
+            <div class="toggle-opt active" id="mode-del" onclick="setMode('del')">🚲 Delivery</div>
+            <div class="toggle-opt" id="mode-pick" onclick="setMode('pick')">🛍 Pickup</div>
+        </div>
+
+        <div class="field">
+            <label id="loc-label">Delivery Address *</label>
+            <input type="text" id="address-input" placeholder="Search with Google Maps..." oninput="validate()">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="field"><label>Apt (Optional)</label><input type="text" id="apt"></div>
+            <div class="field"><label>Phone *</label><input type="tel" id="phone" maxlength="10" placeholder="10 Digits" oninput="validate()"></div>
+        </div>
+
+        <div class="field">
+            <label>Cart Proof *</label>
+            <input type="file" id="cart-file" accept="image/*" style="display:none" onchange="handleImage()">
+            <div id="file-box" style="background:#000; border:1px dashed var(--blue); padding:20px; text-align:center; border-radius:12px; color:var(--blue);" onclick="document.getElementById('cart-file').click()">📸 Upload Cart Screenshot</div>
+        </div>
+
+        <div class="footer"><button class="submit-btn" id="next-btn" onclick="showConfirmation()" disabled>Continue to Order</button></div>
+    </div>
+
+    <div id="view-conf" class="view" style="text-align:center;">
+        <h2 style="color:var(--blue);">Is this correct?</h2>
+        <div id="conf-summary" style="text-align:left; background:#111827; padding:15px; border-radius:12px; margin:15px 0; font-size:13px;"></div>
+        <img id="conf-img" style="width:100%; border-radius:12px; margin-bottom:15px;">
+        <h3 id="conf-cost"></h3>
+        <div class="footer">
+            <button class="submit-btn" onclick="submitFinal()">Confirm & Pay</button>
+            <button class="submit-btn" style="background:transparent; margin-top:10px;" onclick="switchView('view-form')">Edit Details</button>
+        </div>
+    </div>
+
+    <div id="view-success" class="view" style="text-align:center;">
+        <div style="font-size:80px; color:var(--green); margin-top:40px;">✔</div>
+        <h1 style="margin-top:0;">Order Confirmed</h1>
+        <p style="color:var(--hint);">Staff have received your request.</p>
+        <div class="footer"><button class="submit-btn" onclick="tg.close()">Close App</button></div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        let mode = 'del', img64 = '', balance = 0.00;
+
+        function initApp() {
+            tg.expand();
+            initAutocomplete();
+            checkSeason();
+        }
+
+        function checkSeason() {
+            const now = new Date();
+            const banner = document.getElementById('seasonal-banner');
+            // Fireworks for New Year's Dec 30 - Jan 3
+            if ((now.getMonth() === 11 && now.getDate() >= 30) || (now.getMonth() === 0 && now.getDate() <= 3)) {
+                banner.innerText = "🎆 HAPPY NEW YEAR 2026 FROM PROFIT EATS 🎆";
+                fireworks();
+            } else { banner.innerText = "Enjoy 10% Bonus on Crypto Deposits"; }
+        }
+
+        function fireworks() {
+            var end = Date.now() + (10 * 1000);
+            (function frame() {
+                confetti({ particleCount: 3, angle: 60, spread: 55, origin: { x: 0 } });
+                confetti({ particleCount: 3, angle: 120, spread: 55, origin: { x: 1 } });
+                if (Date.now() < end) { requestAnimationFrame(frame); }
+            }());
+        }
+
+        function initAutocomplete() {
+            const input = document.getElementById('address-input');
+            const autocomplete = new google.maps.places.Autocomplete(input);
+        }
+
+        function setMode(m) {
+            mode = m;
+            document.getElementById('mode-del').classList.toggle('active', m === 'del');
+            document.getElementById('mode-pick').classList.toggle('active', m === 'pick');
+            document.getElementById('loc-label').innerText = m === 'del' ? "Delivery Address *" : "Pickup Address & Store Name *";
+        }
+
+        function handleImage() {
+            const file = document.getElementById('cart-file').files[0];
+            const reader = new FileReader();
+            reader.onloadend = () => { 
+                img64 = reader.result; 
+                document.getElementById('file-box').innerText = "✅ Cart Screenshot Attached";
+                validate();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function validate() {
+            const ok = document.getElementById('address-input').value && document.getElementById('phone').value.length === 10 && img64;
+            document.getElementById('next-btn').disabled = !ok;
+        }
+
+        function showConfirmation() {
+            document.getElementById('conf-summary').innerHTML = `<b>Mode:</b> ${mode}<br><b>Address:</b> ${document.getElementById('address-input').value}<br><b>Phone:</b> ${document.getElementById('phone').value}`;
+            document.getElementById('conf-img').src = img64;
+            document.getElementById('conf-cost').innerText = "Total to Pay: $15.00"; // Math from backend
+            switchView('view-conf');
+        }
+
+        function switchView(id) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+
+        function submitFinal() {
+            if(balance < 15.00) { tg.showAlert("Order Failed: Top up more credits!"); return; }
+            tg.sendData(JSON.stringify({action:"order_final", mode: mode, img: img64}));
+            switchView('view-success');
+        }
+    </script>
+</body>
+</html>
