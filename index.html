@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+    <style>
+        :root { --bg: #030712; --card: #111827; --blue: #3b82f6; --text: #f8fafc; --hint: #64748b; --green: #10b981; }
+        body { background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; margin: 0; padding: 15px; padding-bottom: 120px; }
+        
+        /* Fireworks Seasonal Background */
+        #seasonal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: -1; }
+
+        .balance-card { background: linear-gradient(135deg, #2563eb, #3b82f6); border-radius: 16px; padding: 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; box-shadow: 0 10px 25px rgba(59, 130, 246, 0.3); }
+        .bal-val { font-size: 28px; font-weight: 800; }
+        .add-btn { background: rgba(255,255,255,0.2); padding: 8px 12px; border-radius: 10px; font-size: 12px; font-weight: bold; border: 1px solid rgba(255,255,255,0.3); cursor: pointer; }
+
+        .view { display: none; }
+        .view.active { display: block; animation: fadeIn 0.4s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .toggle-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; background: #0f172a; padding: 6px; border-radius: 12px; margin-bottom: 20px; }
+        .toggle-opt { padding: 12px; text-align: center; border-radius: 8px; font-weight: 700; cursor: pointer; }
+        .toggle-opt.active { background: var(--blue); color: white; }
+
+        .pay-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+        .pay-opt { background: #111827; border: 1px solid #1e293b; padding: 12px; border-radius: 10px; text-align: center; cursor: pointer; font-size: 13px; font-weight: 600; }
+        .pay-opt.active { background: var(--blue); border-color: var(--blue); }
+
+        .field { margin-bottom: 15px; }
+        label { display: block; font-size: 11px; color: var(--hint); margin-bottom: 6px; font-weight: 800; text-transform: uppercase; }
+        input { width: 100%; background: #000; border: 1px solid #1e293b; padding: 14px; border-radius: 12px; color: white; box-sizing: border-box; outline: none; }
+
+        .footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 15px; background: rgba(3, 7, 18, 0.95); border-top: 1px solid #1e293b; backdrop-filter: blur(10px); z-index: 100; }
+        .submit-btn { width: 100%; background: #334155; color: #94a3b8; border: none; padding: 18px; border-radius: 12px; font-size: 18px; font-weight: 800; cursor: pointer; }
+        .submit-btn.ready { background: var(--blue); color: white; }
+    </style>
+</head>
+<body onload="initApp()">
+    <canvas id="seasonal-overlay"></canvas>
+
+    <div id="v-order" class="view active">
+        <div class="balance-card">
+            <div><div style="font-size:12px; opacity:0.8;">Profit Eats Wallet</div><div class="bal-val" id="disp-bal">$0.00</div></div>
+            <div class="add-btn" onclick="switchView('v-deposit')">Add Funds +</div>
+        </div>
+
+        <div class="toggle-row">
+            <div class="toggle-opt active" id="t-del" onclick="setMode('del')">🚲 Delivery</div>
+            <div class="toggle-opt" id="t-pick" onclick="setMode('pick')">🛍 Pickup</div>
+        </div>
+
+        <div class="field">
+            <label id="addr-lbl">Full Address *</label>
+            <input type="text" id="address" placeholder="123 Street, City, Zip" oninput="v()">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="field"><label>Apt (Optional)</label><input type="text" id="apt"></div>
+            <div class="field"><label>Phone *</label><input type="tel" id="phone" maxlength="10" placeholder="10 Digits" oninput="v()"></div>
+        </div>
+
+        <div class="field">
+            <label>Cart Proof *</label>
+            <input type="file" id="cart-f" accept="image/*" style="display:none" onchange="hImg()">
+            <div id="file-btn" style="background:#000; border:1px dashed var(--blue); padding:15px; text-align:center; border-radius:12px; color:var(--blue);" onclick="document.getElementById('cart-f').click()">📸 Upload Cart Screenshot</div>
+        </div>
+
+        <div class="footer"><button class="submit-btn" id="btn-next" onclick="showConfirm()" disabled>ORDER NOW</button></div>
+    </div>
+
+    <div id="v-deposit" class="view">
+        <h2 onclick="switchView('v-order')">← Back</h2>
+        <label>Select Method</label>
+        <div class="pay-grid">
+            <div class="pay-opt" onclick="selPay('Cash App')">Cash App</div>
+            <div class="pay-opt" onclick="selPay('Apple Pay')">Apple Pay</div>
+            <div class="pay-opt" onclick="selPay('Crypto')">Crypto (Auto)</div>
+        </div>
+        <div id="dep-details" style="margin-top:20px; display:none;">
+            <label id="dep-instr"></label>
+            <input type="number" id="dep-amt" placeholder="Amount Sent ($)" style="margin-top:10px;">
+            <button class="submit-btn ready" style="margin-top:20px;" onclick="sendDep()">Submit for Verification</button>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        let mode = 'del', img64 = '', selMethod = '';
+
+        function initApp() {
+            tg.expand();
+            const now = new Date(); // Fireworks for New Year's
+            if ((now.getMonth() === 11 && now.getDate() >= 30) || (now.getMonth() === 0 && now.getDate() <= 3)) {
+                var end = Date.now() + (10 * 1000);
+                (function frame() {
+                    confetti({ particleCount: 2, angle: 60, spread: 55, origin: { x: 0 } });
+                    confetti({ particleCount: 2, angle: 120, spread: 55, origin: { x: 1 } });
+                    if (Date.now() < end) { requestAnimationFrame(frame); }
+                }());
+            }
+        }
+
+        function switchView(id) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+
+        function selPay(m) {
+            selMethod = m;
+            if(m === 'Crypto') { tg.sendData(JSON.stringify({action:'topup'})); tg.close(); }
+            else {
+                document.getElementById('dep-details').style.display = 'block';
+                document.getElementById('dep-instr').innerText = `Send to our ${m} and enter amount below:`;
+            }
+        }
+
+        function hImg() {
+            const f = document.getElementById('cart-f').files[0];
+            const r = new FileReader();
+            r.onloadend = () => { img64 = r.result; document.getElementById('file-btn').innerText = "✅ Cart Attached"; v(); };
+            r.readAsDataURL(f);
+        }
+
+        function v() {
+            const ok = document.getElementById('address').value && document.getElementById('phone').value.length === 10 && img64;
+            const b = document.getElementById('btn-next');
+            b.className = ok ? "submit-btn ready" : "submit-btn";
+            b.disabled = !ok;
+        }
+
+        function sendOrder() {
+            tg.sendData(JSON.stringify({action:"order_final", addr: document.getElementById('address').value, phn: document.getElementById('phone').value, img: img64}));
+            tg.close();
+        }
+    </script>
+</body>
+</html>
