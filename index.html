@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+    <style>
+        :root { --bg: #030712; --card: #111827; --blue: #3b82f6; --text: #f8fafc; --hint: #64748b; --green: #10b981; }
+        html, body { height: 100%; margin: 0; padding: 0; background: var(--bg); color: var(--text); overflow: hidden; font-family: sans-serif; }
+        .main-container { height: 100vh; display: flex; flex-direction: column; padding: 15px; box-sizing: border-box; overflow-y: auto; padding-bottom: 50px; }
+        
+        /* BOLD UI ELEMENTS */
+        .tab-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .tab { padding: 12px; text-align: center; border-bottom: 2px solid #1e293b; color: var(--hint); font-weight: 900; cursor: pointer; text-transform: uppercase; font-size: 11px; }
+        .tab.active { border-bottom-color: var(--blue); color: white; }
+
+        .view { display: none; } 
+        .view.active { display: block; animation: fadeIn 0.2s ease forwards; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .balance-card { background: linear-gradient(135deg, #1d4ed8, #3b82f6); border-radius: 16px; padding: 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .bal-amt { font-size: 32px; font-weight: 950; }
+
+        label { display: block; font-size: 10px; color: var(--hint); margin-bottom: 5px; font-weight: 950; text-transform: uppercase; }
+        input { width: 100%; background: #000; border: 1px solid #1e293b; padding: 14px; border-radius: 12px; color: white; box-sizing: border-box; margin-bottom: 12px; font-weight: 700; }
+        
+        .price-display { background: #064e3b; padding: 15px; border-radius: 12px; margin-bottom: 15px; text-align: center; font-weight: 950; color: #34d399; border: 1px solid var(--blue); font-size: 18px; }
+
+        .btn { width: 100%; border: none; padding: 18px; border-radius: 12px; font-size: 16px; font-weight: 950; cursor: pointer; text-transform: uppercase; margin-bottom: 10px; }
+        .btn-blue { background: var(--blue); color: white; }
+        .btn-pay { background: var(--card); color: white; border: 1px solid #1e293b; display: flex; justify-content: space-between; }
+    </style>
+</head>
+<body onload="init()">
+    <div class="main-container">
+        <div class="tab-row">
+            <div class="tab active" id="t1" onclick="show('v-order','t1')">Order</div>
+            <div class="tab" id="t2" onclick="show('v-topup','t2')">Add Funds</div>
+        </div>
+
+        <div id="v-order" class="view active">
+            <div class="balance-card">
+                <div><div style="font-weight:900; font-size:10px;">WALLET</div><div class="bal-amt" id="user-bal">$0.00</div></div>
+                <div style="background:rgba(255,255,255,0.2); padding:8px 12px; border-radius:8px; font-size:12px; font-weight:950;" onclick="show('v-topup','t2')">TOP UP</div>
+            </div>
+
+            <label>Address</label><input type="text" id="addr" placeholder="Full Delivery Address">
+            <label>Phone</label><input type="tel" id="phn" placeholder="10 Digits">
+            <label>Grubhub Total ($)</label><input type="number" id="tot" oninput="calc()">
+            
+            <div class="price-display" id="pay-label">YOU PAY (30%): $0.00</div>
+            <div id="file-label" style="text-align:center; padding:15px; border:2px dashed var(--blue); border-radius:12px; font-weight:900; color:var(--blue); margin-bottom:20px;" onclick="document.getElementById('img').click()">📸 UPLOAD CART PROOF</div>
+            <input type="file" id="img" hidden onchange="hImg()">
+
+            <button class="btn btn-blue" onclick="sendOrder()">Place Order</button>
+        </div>
+
+        <div id="v-topup" class="view">
+            <label>Select Payment Method</label>
+            <button class="btn btn-pay" onclick="genLTC()"><span>₿ Litecoin (Auto Confirmation)</span><span>⚡</span></button>
+            <button class="btn btn-pay" onclick="alert('CashApp: $ProfitEatsTag')"><span>💸 Cash App</span><span>$</span></button>
+            <button class="btn btn-pay" onclick="alert('Apple Pay: 443-000-0000')"><span>🍎 Apple Pay</span><span></span></button>
+            
+            <div id="ltc-area" style="display:none; background:#000; padding:15px; border-radius:12px; border:1px solid var(--blue); margin-top:20px;">
+                <label>Send Exactly to Address:</label>
+                <code id="ltc-addr" style="display:block; background:#111; padding:10px; color:var(--green); font-weight:900; word-break:break-all;"></code>
+                <p id="ltc-status" style="font-size:12px; color:var(--blue); font-weight:900; text-align:center; margin-top:10px;">🕒 WAITING FOR DEPOSIT...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        let b64 = "";
+
+        function init() { tg.expand(); tg.enableClosingConfirmation(); }
+        function show(vId, tId) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.getElementById(vId).classList.add('active');
+            document.getElementById(tId).classList.add('active');
+        }
+        function calc() {
+            const v = document.getElementById('tot').value;
+            document.getElementById('pay-label').innerText = `YOU PAY (30%): $${(v*0.3).toFixed(2)}`;
+        }
+        function hImg() {
+            const f = document.getElementById('img').files[0];
+            const r = new FileReader();
+            r.onloadend = () => { b64 = r.result; document.getElementById('file-label').innerText = "✅ PROOF ATTACHED"; };
+            r.readAsDataURL(f);
+        }
+
+        // USING API CALLS INSTEAD OF SENDDATA TO KEEP APP OPEN
+        async def api(endpoint, body) {
+            return await fetch(`https://YOUR_BACKEND_URL/${endpoint}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({...body, uid: tg.initDataUnsafe.user.id})
+            }).then(r => r.json());
+        }
+
+        async function genLTC() {
+            document.getElementById('ltc-area').style.display = 'block';
+            const res = await api('create_payment', { amount: 20 });
+            document.getElementById('ltc-addr').innerText = res.address;
+            trackLTC(res.payment_id);
+        }
+
+        async function sendOrder() {
+            const res = await api('order', {
+                addr: document.getElementById('addr').value,
+                phn: document.getElementById('phn').value,
+                price: (document.getElementById('tot').value * 0.3).toFixed(2),
+                img: b64
+            });
+            if(res.ok) {
+                confetti();
+                tg.showAlert("ORDER CONFIRMED! Closing app...");
+                setTimeout(() => tg.close(), 3000); // ONLY CLOSE ON CONFIRMATION
+            }
+        }
+    </script>
+</body>
+</html>
