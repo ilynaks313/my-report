@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root { --bg: #212121; --purple: #8774e1; --text: #ffffff; --hint: #aaaaaa; }
+        body { background-color: var(--bg); color: var(--text); margin: 0; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; }
+        .container { text-align: center; width: 90%; max-width: 400px; padding: 20px; }
+        
+        /* Calculator Styles */
+        .calc-box { background: #2c2c2c; padding: 15px; border-radius: 15px; margin: 20px 0; border: 1px solid #444; }
+        input { width: 80%; padding: 10px; border-radius: 8px; border: 1px solid var(--purple); background: #1a1a1a; color: white; font-size: 18px; text-align: center; }
+        .result { font-size: 22px; font-weight: bold; color: #4caf50; margin-top: 10px; }
+
+        /* ToS Styles */
+        .tos-container { margin-bottom: 20px; font-size: 14px; color: var(--hint); display: flex; align-items: center; justify-content: center; gap: 10px; }
+        
+        .order-btn { background: var(--purple); color: white; border: none; padding: 18px; width: 100%; border-radius: 12px; font-size: 18px; font-weight: bold; cursor: pointer; }
+        .order-btn:disabled { background: #555; cursor: not-allowed; }
+        .vouch-btn { background: transparent; color: var(--purple); border: 2px solid var(--purple); padding: 12px; width: 100%; border-radius: 12px; font-size: 16px; font-weight: bold; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div style="font-size: 50px;">🍕</div>
+        <h1>Profit Eats</h1>
+        
+        <div class="calc-box">
+            <label>🛒 Enter Cart Total ($)</label><br><br>
+            <input type="number" id="cart-total" placeholder="0.00" oninput="calculate()">
+            <div class="result" id="pay-total">You Pay: $0.00</div>
+        </div>
+
+        <div class="tos-container">
+            <input type="checkbox" id="tos-check" onchange="toggleBtn()" style="width: 20px;">
+            <span>I agree to the Terms of Service</span>
+        </div>
+
+        <button class="order-btn" id="main-btn" onclick="startOrder()" disabled>🚀 START ORDER</button>
+        <button class="vouch-btn" onclick="window.Telegram.WebApp.openTelegramLink('https://t.me/YourChannel')">💎 VIEW VOUCHES</button>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        function calculate() {
+            const val = document.getElementById('cart-total').value;
+            const discounted = (val * 0.30).toFixed(2); // 70% off means paying 30%
+            document.getElementById('pay-total').innerText = "You Pay: $" + discounted;
+        }
+
+        function toggleBtn() {
+            document.getElementById('main-btn').disabled = !document.getElementById('tos-check').checked;
+        }
+
+        function startOrder() {
+            const total = document.getElementById('cart-total').value;
+            tg.sendData("action:start_order:" + total);
+            tg.close();
+        }
+    </script>
+</body>
+</html>
