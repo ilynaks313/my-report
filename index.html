@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+    <style>
+        :root { --bg: #030712; --card: #111827; --blue: #3b82f6; --text: #f8fafc; --hint: #64748b; --green: #10b981; }
+        html, body { height: 100%; margin: 0; padding: 0; background: var(--bg); color: var(--text); overflow: hidden; font-family: -apple-system, sans-serif; }
+        .main-container { height: 100vh; display: flex; flex-direction: column; padding: 15px; box-sizing: border-box; overflow-y: auto; padding-bottom: 120px; }
+        
+        .tab-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .tab { padding: 12px; text-align: center; border-bottom: 2px solid #1e293b; color: var(--hint); font-weight: 900; cursor: pointer; text-transform: uppercase; font-size: 11px; }
+        .tab.active { border-bottom-color: var(--blue); color: white; }
+
+        .view { display: none; } 
+        .view.active { display: block; animation: fadeIn 0.3s ease forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .balance-card { background: linear-gradient(135deg, #2563eb, #3b82f6); border-radius: 16px; padding: 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3); }
+        .bal-label { font-size: 11px; font-weight: 900; opacity: 0.9; text-transform: uppercase; }
+        .bal-amt { font-size: 28px; font-weight: 950; }
+
+        label { display: block; font-size: 11px; color: var(--hint); margin-bottom: 6px; font-weight: 950; text-transform: uppercase; }
+        input { width: 100%; background: #000; border: 1px solid #1e293b; padding: 14px; border-radius: 12px; color: white; box-sizing: border-box; outline: none; margin-bottom: 12px; font-weight: 700; }
+        
+        .price-display { background: #1e293b; padding: 15px; border-radius: 12px; margin-bottom: 15px; text-align: center; font-weight: 950; color: var(--green); border: 1px solid var(--blue); font-size: 17px; }
+
+        .footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 20px; background: rgba(3, 7, 18, 0.95); border-top: 1px solid #1e293b; backdrop-filter: blur(10px); z-index: 1000; }
+        .submit-btn { width: 100%; background: var(--blue); color: white; border: none; padding: 18px; border-radius: 12px; font-size: 18px; font-weight: 950; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; }
+    </style>
+</head>
+<body onload="initApp()">
+    <div class="main-container">
+        <div class="tab-row" id="top-tabs">
+            <div class="tab active" id="t-order" onclick="switchTab('v-order')">New Order</div>
+            <div class="tab" id="t-hist" onclick="switchTab('v-hist')">History</div>
+        </div>
+
+        <div id="v-order" class="view active">
+            <div class="balance-card">
+                <div><div class="bal-label">Wallet Balance</div><div class="bal-amt">$0.00</div></div>
+                <div style="background:rgba(255,255,255,0.2); padding:10px 14px; border-radius:10px; font-size:12px; font-weight:900; cursor:pointer;" onclick="switchView('v-topup')">ADD +</div>
+            </div>
+
+            <label>Delivery Address</label>
+            <input type="text" id="address" placeholder="Address, City, Zip">
+            
+            <label>Phone Number</label>
+            <input type="tel" id="phone" placeholder="10 Digits" maxlength="10">
+            
+            <label>Grubhub Cart Total ($)</label>
+            <input type="number" id="cart-total" placeholder="0.00" oninput="calculate()">
+            
+            <div class="price-display" id="price-label">YOU PAY (30%): $0.00</div>
+
+            <input type="file" id="cart-img" accept="image/*" style="display:none" onchange="previewImg()">
+            <div id="upload-btn" style="background:#000; border:1px dashed var(--blue); padding:18px; text-align:center; border-radius:12px; color:var(--blue); font-weight:950; margin-bottom:120px;" onclick="document.getElementById('cart-img').click()">📸 UPLOAD CART PROOF</div>
+
+            <div class="footer"><button class="submit-btn" onclick="processOrder()">Place Order</button></div>
+        </div>
+
+        <div id="v-topup" class="view">
+            <h3 onclick="switchView('v-order')" style="color:var(--blue); font-weight:950;">← BACK</h3>
+            <div style="background:#111827; padding:20px; border-radius:12px; font-weight:950; margin-top:20px; display:flex; justify-content:space-between;" onclick="tg.sendData(JSON.stringify({action:'gen_ltc'})); tg.close();">
+                <span>₿ LITECOIN (AUTO)</span><span>⚡</span>
+            </div>
+        </div>
+
+        <div id="v-hist" class="view">
+            <div style="text-align:center; color:var(--hint); margin-top:50px; font-weight:900;">HISTORY EMPTY</div>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        let base64Img = "";
+
+        function initApp() {
+            tg.expand();
+            confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+        }
+
+        function calculate() {
+            const val = document.getElementById('cart-total').value;
+            const price = (val * 0.3).toFixed(2);
+            document.getElementById('price-label').innerText = `YOU PAY (30%): $${price}`;
+        }
+
+        function switchTab(id) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            if(id === 'v-order') document.getElementById('t-order').classList.add('active');
+            else document.getElementById('t-hist').classList.add('active');
+        }
+
+        function switchView(id) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+
+        function previewImg() {
+            const file = document.getElementById('cart-img').files[0];
+            const reader = new FileReader();
+            reader.onloadend = () => { base64Img = reader.result; document.getElementById('upload-btn').innerText = "✅ PROOF LOADED"; };
+            reader.readAsDataURL(file);
+        }
+
+        function processOrder() {
+            const addr = document.getElementById('address').value;
+            const total = document.getElementById('cart-total').value;
+            if(!addr || !total || !base64Img) return tg.showAlert("FILL ALL FIELDS!");
+
+            tg.sendData(JSON.stringify({
+                action: "order_final",
+                addr: addr,
+                phn: document.getElementById('phone').value,
+                price: (total * 0.3).toFixed(2),
+                img: base64Img
+            }));
+            tg.close();
+        }
+    </script>
+</body>
+</html>
